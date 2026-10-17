@@ -60,7 +60,7 @@ func TestReadFVecsFirstValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Same numbers `od -t f4 -j 4 -N 32` printed for vector 0.
+	// Matches `od -t f4 -j 4 -N 32` on the file.
 	want := []float32{0, 16, 35, 5, 32, 31, 14, 10}
 	for i, w := range want {
 		if vecs[0][i] != w {
@@ -83,7 +83,7 @@ func TestReadIVecsGroundTruth(t *testing.T) {
 		if len(row) != 100 {
 			t.Fatalf("query %d has %d neighbours, want 100", q, len(row))
 		}
-		// IDs are positions in the base file, so they must be in [0, 10000).
+		// IDs are positions in the base file.
 		for _, id := range row {
 			if id < 0 || id >= 10000 {
 				t.Fatalf("query %d has id %d, outside [0, 10000)", q, id)
@@ -101,7 +101,6 @@ func TestReadFVecsMissingFile(t *testing.T) {
 }
 
 func TestReadFVecsTruncated(t *testing.T) {
-	// A record that promises d=4 but holds only 2 floats must fail, not return a short vector.
 	path := filepath.Join(t.TempDir(), "bad.fvecs")
 	f, err := os.Create(path)
 	if err != nil {
@@ -117,7 +116,6 @@ func TestReadFVecsTruncated(t *testing.T) {
 	}
 }
 
-// writeFVecs writes raw records so tests can build bad files.
 func writeFVecs(t *testing.T, recs ...[]float32) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "x.fvecs")
@@ -134,7 +132,6 @@ func writeFVecs(t *testing.T, recs ...[]float32) string {
 }
 
 func TestReadFVecsDimChanges(t *testing.T) {
-	// Record 0 has d=3, record 1 has d=2: the file is inconsistent.
 	path := writeFVecs(t, []float32{1, 2, 3}, []float32{4, 5})
 
 	_, err := ReadFVecs(path)
@@ -144,7 +141,6 @@ func TestReadFVecsDimChanges(t *testing.T) {
 }
 
 func TestReadFVecsNegativeDim(t *testing.T) {
-	// A garbage d = -5 must be an error, not a panic inside make().
 	path := filepath.Join(t.TempDir(), "neg.fvecs")
 	f, err := os.Create(path)
 	if err != nil {

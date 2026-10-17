@@ -74,7 +74,7 @@ func TestLengthMismatch(t *testing.T) {
 }
 
 func TestNormalize(t *testing.T) {
-	v := []float32{3, 4} // length 5
+	v := []float32{3, 4}
 	Normalize(v)
 
 	want := []float32{0.6, 0.8}
@@ -84,7 +84,6 @@ func TestNormalize(t *testing.T) {
 		}
 	}
 
-	// After normalizing, the vector's length must be 1, so Dot(v, v) = 1.
 	self, _ := Dot(v, v)
 	if !approxEqual(self, 1) {
 		t.Errorf("Dot(v, v) = %v after Normalize, want 1", self)
@@ -102,15 +101,10 @@ func TestNormalizeZero(t *testing.T) {
 }
 
 func TestCosineViaDot(t *testing.T) {
-	// Same direction, different lengths → cosine 1.
 	a := []float32{1, 2, 3}
 	b := []float32{2, 4, 6}
 	Normalize(a)
 	Normalize(b)
-
-	for _, x := range b {
-		println(x)
-	}
 	got, _ := Dot(a, b)
 	if !approxEqual(got, 1) {
 		t.Errorf("cosine of parallel vectors = %v, want 1", got)

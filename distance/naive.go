@@ -6,7 +6,7 @@ import (
 	"okapi/internal/errs"
 )
 
-// L2Squared returns the squared Euclidean distance Σ(a[i]-b[i])².
+// l2Naive and dotNaive are the reference versions the unrolled ones are tested against.
 func l2Naive(a, b []float32) (float32, error) {
 	sum := float32(0)
 
@@ -23,7 +23,6 @@ func l2Naive(a, b []float32) (float32, error) {
 	return sum, nil
 }
 
-// Dot returns the dot product Σ a[i]*b[i].
 func dotNaive(a, b []float32) (float32, error) {
 	dot := float32(0)
 	n := len(a)
@@ -39,8 +38,8 @@ func dotNaive(a, b []float32) (float32, error) {
 	return dot, nil
 }
 
-// Normalize scales v to length 1 in place, so Dot on normalized vectors is cosine similarity.
-// An all-zero vector is left unchanged.
+// Normalize scales v to unit length in place, so Dot then gives cosine similarity.
+// A zero vector is left unchanged.
 func Normalize(v []float32) {
 	sumSq := float32(0)
 

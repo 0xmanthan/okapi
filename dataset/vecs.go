@@ -70,9 +70,8 @@ func ReadIVecs(path string) ([][]int32, error) {
 	return vecs, nil
 }
 
-// readDim reads one record's int32 dimension and checks it.
-// It returns io.EOF unwrapped at a clean end of file, so callers can stop the loop.
-// firstD remembers the first record's d (-1 = not seen yet); every later record must match it.
+// readDim returns io.EOF unwrapped at a clean end of file.
+// firstD is -1 until the first record; every later d must match it.
 func readDim(r io.Reader, record int, firstD *int32) (int32, error) {
 	var d int32
 	err := binary.Read(r, binary.LittleEndian, &d)
@@ -82,7 +81,7 @@ func readDim(r io.Reader, record int, firstD *int32) (int32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("record %d: read dim: %w: %w", record, errs.ErrCorrupt, err)
 	}
-	// make() panics on a negative length, so a garbage d must become an error first.
+	// make panics on a negative length.
 	if d <= 0 {
 		return 0, fmt.Errorf("record %d: %w: d=%d", record, errs.ErrCorrupt, d)
 	}
