@@ -7,7 +7,7 @@ import (
 )
 
 // L2Squared returns the squared Euclidean distance Σ(a[i]-b[i])².
-func L2Squared(a, b []float32) (float32, error) {
+func l2Naive(a, b []float32) (float32, error) {
 	sum := float32(0)
 
 	n := len(a)
@@ -24,7 +24,7 @@ func L2Squared(a, b []float32) (float32, error) {
 }
 
 // Dot returns the dot product Σ a[i]*b[i].
-func Dot(a, b []float32) (float32, error) {
+func dotNaive(a, b []float32) (float32, error) {
 	dot := float32(0)
 	n := len(a)
 	if n != len(b) {
