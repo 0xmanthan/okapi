@@ -4,25 +4,42 @@
 //	go run ./cmd/eval            // summary + details for the first 2 queries
 //	go run ./cmd/eval -show 5    // details for the first 5 queries
 //	go run ./cmd/eval -show 0    // summary only
+//	go run ./cmd/eval -index hnsw -ef 20 -m 16 -efc 200
+//	go run ./cmd/eval -index hnsw -ef 10,20,50,100,200   // sweep: one summary row per ef
 package main
 
 import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"okapi/dataset"
 	"okapi/index/flat"
+	"okapi/index/hnsw"
 )
+
+// result is what both indexes return, so the rest of main doesn't care which one ran.
+type result struct {
+	ID   uint64
+	Dist float32
+}
 
 const dataDir = "data/siftsmall/"
 
 func main() {
 	k := flag.Int("k", 10, "neighbours to return per query")
 	show := flag.Int("show", 2, "print the full result table for this many queries")
+	indexType := flag.String("index", "flat", "flat or hnsw")
+	efList := flag.String("ef", "20", "hnsw: efSearch, or a comma-separated list to sweep")
+	m := flag.Int("m", 16, "hnsw: links per node per layer")
+	efc := flag.Int("efc", 200, "hnsw: efConstruction")
 	flag.Parse()
+	efs := parseInts(*efList)
 
 	section("1. Dataset")
 	base := mustFVecs(dataDir + "siftsmall_base.fvecs")
@@ -40,55 +57,69 @@ func main() {
 	fmt.Printf("base[0][:8]   %v\n", base[0][:8])
 	fmt.Printf("query[0][:8]  %v\n", query[0][:8])
 
-	section("2. Build flat index")
+	section("2. Build " + *indexType + " index")
 	buildStart := time.Now()
-	idx := flat.New(dim)
-	for i, v := range base {
-		if err := idx.Add(uint64(i), v); err != nil {
-			log.Fatal(err)
+	var search func(q []float32, ef int) ([]result, error)
+	switch *indexType {
+	case "flat":
+		idx := flat.New(dim)
+		for i, v := range base {
+			if err := idx.Add(uint64(i), v); err != nil {
+				log.Fatal(err)
+			}
 		}
+		search = func(q []float32, _ int) ([]result, error) {
+			rs, err := idx.Search(q, *k)
+			out := make([]result, len(rs))
+			for i, r := range rs {
+				out[i] = result(r)
+			}
+			return out, err
+		}
+	case "hnsw":
+		idx := hnsw.New(dim, hnsw.Config{M: *m, EfConstruction: *efc, Seed: 1})
+		for i, v := range base {
+			if err := idx.Add(uint64(i), v); err != nil {
+				log.Fatal(err)
+			}
+		}
+		fmt.Printf("params        M=%d efConstruction=%d efSearch=%v\n", *m, *efc, efs)
+		search = func(q []float32, ef int) ([]result, error) {
+			rs, err := idx.Search(q, *k, ef)
+			out := make([]result, len(rs))
+			for i, r := range rs {
+				out[i] = result(r)
+			}
+			return out, err
+		}
+	default:
+		log.Fatalf("unknown -index %q: want flat or hnsw", *indexType)
 	}
 	fmt.Printf("build time    %v\n", time.Since(buildStart))
 	fmt.Printf("vector memory %.2f MB  (%d × %d × 4 bytes)\n",
 		float64(len(base)*dim*4)/1e6, len(base), dim)
 
-	// Time each query separately to get the latency spread.
-	section("3. Search")
-	results := make([][]flat.Result, len(query))
-	lat := make([]time.Duration, len(query))
-	total := time.Now()
-	for q := range query {
-		t := time.Now()
-		results[q], err = idx.Search(query[q], *k)
-		lat[q] = time.Since(t)
-		if err != nil {
-			log.Fatal(err)
-		}
+	if *indexType == "hnsw" && len(efs) > 1 {
+		sweep(search, query, gt, *k, efs)
+		return
 	}
-	elapsed := time.Since(total)
 
+	section("3. Search")
+	results, lat, elapsed := runQueries(search, query, efs[0])
 	sorted := slices.Clone(lat)
 	slices.Sort(sorted)
-	distances := len(base) * len(query)
 	fmt.Printf("queries       %d in %v\n", len(query), elapsed)
 	fmt.Printf("QPS           %.0f\n", float64(len(query))/elapsed.Seconds())
 	fmt.Printf("latency       min %v · p50 %v · p99 %v · max %v\n",
 		sorted[0], sorted[len(sorted)/2], sorted[len(sorted)*99/100], sorted[len(sorted)-1])
-	fmt.Printf("distances     %d per query, %d total → %.1f ns per distance\n",
-		len(base), distances, float64(elapsed.Nanoseconds())/float64(distances))
+	if *indexType == "flat" {
+		distances := len(base) * len(query)
+		fmt.Printf("distances     %d per query, %d total → %.1f ns per distance\n",
+			len(base), distances, float64(elapsed.Nanoseconds())/float64(distances))
+	}
 
 	section(fmt.Sprintf("4. Recall@%d", *k))
-	perQuery := make([]int, len(query))
-	hits := 0
-	for q := range query {
-		truth := idSet(gt[q][:*k])
-		for _, r := range results[q] {
-			if truth[int32(r.ID)] {
-				perQuery[q]++
-			}
-		}
-		hits += perQuery[q]
-	}
+	perQuery, hits := countHits(results, gt, *k)
 	fmt.Printf("recall@%d     %.4f  (%d of %d true neighbours found)\n",
 		*k, float64(hits)/float64(len(query)**k), hits, len(query)**k)
 
@@ -126,6 +157,77 @@ func main() {
 		fmt.Printf("nearest is %.0f away, %d-th is %.0f away, searched in %v\n",
 			results[q][0].Dist, *k, results[q][len(results[q])-1].Dist, lat[q])
 	}
+}
+
+// sweepRuns: each ef is timed this many times and the fastest run kept;
+// one pass over 100 queries takes milliseconds, so a single run is noisy.
+const sweepRuns = 5
+
+// sweep prints one row per ef: the recall-vs-speed curve.
+func sweep(search func([]float32, int) ([]result, error), query [][]float32, gt [][]int32, k int, efs []int) {
+	section("3. efSearch sweep")
+	fmt.Printf("%5s  %9s  %8s  %9s  %9s  %s\n", "ef", fmt.Sprintf("recall@%d", k), "QPS", "p50", "p99", "worst query")
+	for _, ef := range efs {
+		var results [][]result
+		var lat []time.Duration
+		best := time.Duration(math.MaxInt64)
+		for range sweepRuns {
+			r, l, elapsed := runQueries(search, query, ef)
+			if elapsed < best {
+				results, lat, best = r, l, elapsed
+			}
+		}
+		perQuery, hits := countHits(results, gt, k)
+		slices.Sort(lat)
+		fmt.Printf("%5d  %9.4f  %8.0f  %9v  %9v  %d/%d\n",
+			ef, float64(hits)/float64(len(query)*k), float64(len(query))/best.Seconds(),
+			lat[len(lat)/2], lat[len(lat)*99/100], slices.Min(perQuery), k)
+	}
+}
+
+// runQueries times each query separately to get the latency spread.
+func runQueries(search func([]float32, int) ([]result, error), query [][]float32, ef int) ([][]result, []time.Duration, time.Duration) {
+	results := make([][]result, len(query))
+	lat := make([]time.Duration, len(query))
+	total := time.Now()
+	for q := range query {
+		t := time.Now()
+		var err error
+		results[q], err = search(query[q], ef)
+		lat[q] = time.Since(t)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	return results, lat, time.Since(total)
+}
+
+// countHits returns, per query, how many results are in the true top-k, and the total.
+func countHits(results [][]result, gt [][]int32, k int) ([]int, int) {
+	perQuery := make([]int, len(results))
+	hits := 0
+	for q, rs := range results {
+		truth := idSet(gt[q][:k])
+		for _, r := range rs {
+			if truth[int32(r.ID)] {
+				perQuery[q]++
+			}
+		}
+		hits += perQuery[q]
+	}
+	return perQuery, hits
+}
+
+func parseInts(s string) []int {
+	var out []int
+	for _, f := range strings.Split(s, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(f))
+		if err != nil || n <= 0 {
+			log.Fatalf("bad -ef value %q: want positive integers like 10,20,50", f)
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 func section(title string) {

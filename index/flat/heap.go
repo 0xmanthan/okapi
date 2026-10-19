@@ -19,7 +19,6 @@ func (h *maxHeap) Push(x any) {
 	*h = append(*h, x.(Result))
 }
 
-// Pop removes the last element: heap.Pop has already swapped the top there.
 func (h *maxHeap) Pop() any {
 	old := *h
 	n := len(old)

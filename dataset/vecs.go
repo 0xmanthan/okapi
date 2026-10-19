@@ -81,7 +81,6 @@ func readDim(r io.Reader, record int, firstD *int32) (int32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("record %d: read dim: %w: %w", record, errs.ErrCorrupt, err)
 	}
-	// make panics on a negative length.
 	if d <= 0 {
 		return 0, fmt.Errorf("record %d: %w: d=%d", record, errs.ErrCorrupt, d)
 	}
