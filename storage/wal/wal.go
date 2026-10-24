@@ -23,7 +23,7 @@ const (
 	headerSize = typeOff + 1
 )
 
-var crcTable = crc32Table()
+var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
 type Record struct {
 	Type    byte
@@ -47,16 +47,7 @@ func (w *WAL) Append(typ byte, payload []byte) error {
 		return fmt.Errorf("wal: %w: payload is %d bytes", errs.ErrInvalidArgument, len(payload))
 	}
 
-	crc := makeCrc(typ, payload)
-
-	// single Write for the whole record
-	buf := make([]byte, 0, headerSize+len(payload))
-	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(payload)))
-	buf = binary.LittleEndian.AppendUint32(buf, crc)
-	buf = append(buf, typ)
-	buf = append(buf, payload...)
-
-	if _, err := w.f.Write(buf); err != nil {
+	if _, err := w.f.Write(encode(typ, payload)); err != nil {
 		return fmt.Errorf("wal: append: %w", err)
 	}
 	if err := w.f.Sync(); err != nil {
@@ -92,19 +83,14 @@ func ReadAll(path string) (recs []Record, end int64, err error) {
 	header := make([]byte, headerSize)
 	for {
 		left := size - offset
-		if left == 0 {
-			return recs, offset, nil
-		}
 		if left < headerSize {
-			return recs, offset, nil // torn header
+			return recs, offset, nil
 		}
 
 		if _, err := io.ReadFull(r, header); err != nil {
 			return recs, offset, fmt.Errorf("wal: record %d header: %w", len(recs), err)
 		}
-		n := binary.LittleEndian.Uint32(header[lenOff:crcOff])
-		want := binary.LittleEndian.Uint32(header[crcOff:typeOff])
-		typ := header[typeOff]
+		n, want, typ := decodeHeader(header)
 
 		// n can't be more than what's left. also stops a garbage n reaching make()
 		if int64(n) > left-headerSize {
@@ -141,12 +127,22 @@ func allZero(b []byte) bool {
 	return true
 }
 
-func makeCrc(typ byte, payload []byte) uint32 {
-	crc := crc32.Update(0, crcTable, []byte{typ})
-	crc = crc32.Update(crc, crcTable, payload)
-	return crc
+// one buffer, so the record goes out in a single Write
+func encode(typ byte, payload []byte) []byte {
+	buf := make([]byte, 0, headerSize+len(payload))
+	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(payload)))
+	buf = binary.LittleEndian.AppendUint32(buf, makeCrc(typ, payload))
+	buf = append(buf, typ)
+	return append(buf, payload...)
 }
 
-func crc32Table() *crc32.Table {
-	return crc32.MakeTable(crc32.Castagnoli)
+func decodeHeader(h []byte) (n, crc uint32, typ byte) {
+	return binary.LittleEndian.Uint32(h[lenOff:crcOff]),
+		binary.LittleEndian.Uint32(h[crcOff:typeOff]),
+		h[typeOff]
+}
+
+func makeCrc(typ byte, payload []byte) uint32 {
+	crc := crc32.Update(0, crcTable, []byte{typ})
+	return crc32.Update(crc, crcTable, payload)
 }
