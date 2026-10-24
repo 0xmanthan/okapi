@@ -64,7 +64,7 @@ func TestRandomLevelDistribution(t *testing.T) {
 	}
 }
 
-// lineGraph builds a 1-D, layer-0-only graph directly; edges are undirected pairs of node indices.
+// 1-D, layer 0 only. edges are undirected node pairs.
 func lineGraph(pts []float32, edges [][2]uint32) *Index {
 	h := New(1, Config{M: 4, EfConstruction: 10})
 	h.vecs = slices.Clone(pts)
@@ -83,7 +83,6 @@ func lineGraph(pts []float32, edges [][2]uint32) *Index {
 	return h
 }
 
-// nodeIDs drops the distances so results compare against a plain []uint32.
 func nodeIDs(cands []candidate) []uint32 {
 	out := make([]uint32, len(cands))
 	for i, c := range cands {
@@ -170,7 +169,7 @@ func TestSelectNeighborsSimple(t *testing.T) {
 	}
 }
 
-// pointIndex is a dim-2 index whose slab holds pts as nodes 0..n-1; only vec() works on it.
+// only vec() works on this one
 func pointIndex(pts ...[2]float32) *Index {
 	h := New(2, Config{M: 4, EfConstruction: 10})
 	for _, p := range pts {
@@ -203,7 +202,6 @@ func TestSelectNeighborsHeuristicCluster(t *testing.T) {
 	}
 }
 
-// buildRandom inserts n random dim-d vectors (fixed seed) with Add and returns both.
 func buildRandom(t *testing.T, n, dim int) (*Index, [][]float32) {
 	t.Helper()
 	rng := rand.New(rand.NewSource(42))

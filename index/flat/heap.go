@@ -1,6 +1,5 @@
 package flat
 
-// maxHeap keeps the farthest Result on top. Use it through container/heap.
 type maxHeap []Result
 
 func (h maxHeap) Len() int {

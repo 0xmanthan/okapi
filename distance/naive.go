@@ -6,7 +6,7 @@ import (
 	"okapi/internal/errs"
 )
 
-// l2Naive and dotNaive are the reference versions the unrolled ones are tested against.
+// plain loops, the unrolled versions are tested against these
 func l2Naive(a, b []float32) (float32, error) {
 	sum := float32(0)
 
@@ -38,8 +38,7 @@ func dotNaive(a, b []float32) (float32, error) {
 	return dot, nil
 }
 
-// Normalize scales v to unit length in place, so Dot then gives cosine similarity.
-// A zero vector is left unchanged.
+// in place. after this Dot gives cosine. zero vector is left as is.
 func Normalize(v []float32) {
 	sumSq := float32(0)
 

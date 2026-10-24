@@ -84,7 +84,7 @@ func TestSearchBadK(t *testing.T) {
 	}
 }
 
-// The heap result must match the slow, obviously-correct answer: sort every distance.
+// check against just sorting every distance
 func TestSearchMatchesSort(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
 	const n, dim, k = 500, 16, 10

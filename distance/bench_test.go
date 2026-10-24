@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// sink keeps the compiler from eliminating calls whose result is unused.
+// so the compiler can't drop the call
 var sink float32
 
 // 128 = SIFT, 768 = a typical text-embedding model.

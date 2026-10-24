@@ -5,9 +5,7 @@ import (
 	"okapi/internal/errs"
 )
 
-// L2Squared and Dot use 4 independent accumulators so the CPU can overlap the adds.
-
-// L2Squared returns Σ(a[i]-b[i])².
+// 4 separate sums so the CPU can overlap the adds
 func L2Squared(a, b []float32) (float32, error) {
 
 	n := len(a)
@@ -34,7 +32,6 @@ func L2Squared(a, b []float32) (float32, error) {
 	return s0 + s1 + s2 + s3, nil
 }
 
-// Dot returns Σ a[i]*b[i].
 func Dot(a, b []float32) (float32, error) {
 	n := len(a)
 

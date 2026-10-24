@@ -10,7 +10,7 @@ import (
 	"okapi/internal/errs"
 )
 
-// ReadFVecs reads a .fvecs file: records of [int32 d][d × float32], little-endian.
+// fvecs: [int32 d][d float32s] per vector, little-endian.
 func ReadFVecs(path string) ([][]float32, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -40,7 +40,7 @@ func ReadFVecs(path string) ([][]float32, error) {
 	return vecs, nil
 }
 
-// ReadIVecs reads a .ivecs file: records of [int32 d][d × int32], little-endian.
+// ivecs: same layout, int32 values.
 func ReadIVecs(path string) ([][]int32, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -70,8 +70,8 @@ func ReadIVecs(path string) ([][]int32, error) {
 	return vecs, nil
 }
 
-// readDim returns io.EOF unwrapped at a clean end of file.
-// firstD is -1 until the first record; every later d must match it.
+// plain io.EOF at a clean end, callers check with ==.
+// firstD is -1 until the first record.
 func readDim(r io.Reader, record int, firstD *int32) (int32, error) {
 	var d int32
 	err := binary.Read(r, binary.LittleEndian, &d)

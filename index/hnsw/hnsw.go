@@ -48,9 +48,7 @@ type Index struct {
 	entry    int32 // -1 when empty
 	maxLevel int
 
-	// Visited set for searchLayer: node i is visited in the current search iff
-	// visitMark[i] == visitEpoch. Bumping the epoch clears it in O(1).
-	// uint64 so the epoch never wraps.
+	// i is visited iff visitMark[i] == visitEpoch, so a new search just bumps the epoch.
 	visitMark  []uint64
 	visitEpoch uint64
 }
@@ -79,7 +77,6 @@ func (h *Index) randomLevel() int {
 	return int(math.Floor(-math.Log(u) * h.mL))
 }
 
-// newVisitEpoch starts a fresh visited set, growing visitMark to cover every node.
 func (h *Index) newVisitEpoch() {
 	if n := len(h.nodes); len(h.visitMark) < n {
 		h.visitMark = append(h.visitMark, make([]uint64, n-len(h.visitMark))...)
@@ -134,7 +131,7 @@ func (h *Index) searchLayer(q []float32, eps []uint32, ef, layer int) []candidat
 	return out
 }
 
-// selectNeighborsSimple is Alg 3: the m nearest of cands, nearest first. cands may be unsorted.
+// Alg 3. cands can be unsorted.
 func selectNeighborsSimple(cands []candidate, m int) []candidate {
 	nearest := minHeap(slices.Clone(cands))
 	heap.Init(&nearest)
@@ -146,7 +143,7 @@ func selectNeighborsSimple(cands []candidate, m int) []candidate {
 	return out
 }
 
-// selectNeighborsHeuristic is Alg 4 with extendCandidates and keepPrunedConnections off.
+// Alg 4, without extendCandidates / keepPrunedConnections.
 func (h *Index) selectNeighborsHeuristic(cands []candidate, m int) []candidate {
 	nearest := minHeap(slices.Clone(cands))
 	heap.Init(&nearest)
@@ -170,7 +167,7 @@ func (h *Index) selectNeighborsHeuristic(cands []candidate, m int) []candidate {
 	return kept
 }
 
-// Add is Alg 1 with Alg 4 neighbour selection.
+// Alg 1 (neighbours picked with Alg 4).
 func (h *Index) Add(id uint64, v []float32) error {
 	if len(v) != h.dim {
 		return fmt.Errorf("hnsw: %w: got %d, want %d", errs.ErrDimMismatch, len(v), h.dim)
@@ -188,7 +185,7 @@ func (h *Index) Add(id uint64, v []float32) error {
 	level := h.randomLevel()
 	newID := uint32(len(h.nodes))
 
-	h.vecs = append(h.vecs, v...) // append copies, so the caller's slice isn't shared
+	h.vecs = append(h.vecs, v...)
 	h.ids = append(h.ids, id)
 	h.nodes = append(h.nodes, node{
 		level:     level,
@@ -204,12 +201,12 @@ func (h *Index) Add(id uint64, v []float32) error {
 	ep := uint32(h.entry)
 	topLevel := h.maxLevel
 
-	// Phase 1: greedy descent through layers above the new node's level.
+	// greedy descent down to the new node's top layer
 	for layer := topLevel; layer > level; layer-- {
 		ep = h.searchLayer(v, []uint32{ep}, 1, layer)[0].id
 	}
 
-	// Phase 2: on each of the new node's layers, link to M neighbours and shrink any that overflow.
+	// link to M neighbours per layer, then prune anyone who overflows
 	for layer := min(topLevel, level); layer >= 0; layer-- {
 		found := h.searchLayer(v, []uint32{ep}, h.efConstruction, layer)
 		chosen := h.selectNeighborsHeuristic(found, h.m)
@@ -228,7 +225,7 @@ func (h *Index) Add(id uint64, v []float32) error {
 			if len(links) <= limit {
 				continue
 			}
-			// Re-select nb's links by distance to nb. Dropped links stay on the other side.
+			// dropped node still links to nb, so the edge becomes one-way
 			linkCands := make([]candidate, 0, len(links))
 			for _, other := range links {
 				d, _ := distance.L2Squared(h.vec(nb.id), h.vec(other))
@@ -252,8 +249,7 @@ func (h *Index) Add(id uint64, v []float32) error {
 	return nil
 }
 
-// Search is Alg 5: the k nearest stored vectors to q, nearest first.
-// ef is the layer-0 beam width; it's raised to k if smaller.
+// Alg 5. ef is raised to k if smaller.
 func (h *Index) Search(q []float32, k, ef int) ([]Result, error) {
 	if k <= 0 {
 		return nil, fmt.Errorf("hnsw: %w: k=%d", errs.ErrInvalidArgument, k)

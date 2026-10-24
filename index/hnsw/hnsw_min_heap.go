@@ -1,6 +1,5 @@
 package hnsw
 
-// minHeap keeps the nearest candidate on top. Use it through container/heap.
 type minHeap []candidate
 
 func (h minHeap) Len() int {

@@ -1,6 +1,5 @@
 package hnsw
 
-// maxHeap keeps the farthest candidate on top. Use it through container/heap.
 type maxHeap []candidate
 
 func (h maxHeap) Len() int {

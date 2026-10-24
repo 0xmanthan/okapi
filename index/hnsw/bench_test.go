@@ -26,7 +26,7 @@ var (
 	siftLoadEr error
 )
 
-// loadSift reads siftsmall and builds one index, shared by every benchmark in the run.
+// built once, shared by all benchmarks
 func loadSift(b *testing.B) siftData {
 	b.Helper()
 	if _, err := os.Stat(siftDir); err != nil {
@@ -60,7 +60,7 @@ func buildIndex(base [][]float32) (*Index, error) {
 	return h, nil
 }
 
-// BenchmarkBuild is one full siftsmall build (10k × 128-d, M=16, efConstruction=200) per op.
+// one op = full siftsmall build
 func BenchmarkBuild(b *testing.B) {
 	data := loadSift(b)
 	b.ReportAllocs()
@@ -72,8 +72,7 @@ func BenchmarkBuild(b *testing.B) {
 	b.ReportMetric(float64(len(data.base))*float64(b.N)/b.Elapsed().Seconds(), "inserts/s")
 }
 
-// BenchmarkSearch is one k=10 query per op, cycling through the 100 siftsmall queries.
-// recall@10 is reported next to ns/op so speed and accuracy are read together.
+// one op = one k=10 query
 func BenchmarkSearch(b *testing.B) {
 	data := loadSift(b)
 	const k = 10

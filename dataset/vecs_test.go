@@ -13,7 +13,6 @@ import (
 
 const siftDir = "../data/siftsmall/"
 
-// skipIfNoData lets `go test ./...` pass on a fresh clone without the dataset.
 func skipIfNoData(t *testing.T) {
 	t.Helper()
 	if _, err := os.Stat(siftDir); err != nil {
@@ -60,7 +59,7 @@ func TestReadFVecsFirstValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Matches `od -t f4 -j 4 -N 32` on the file.
+	// from od -t f4 -j 4 -N 32
 	want := []float32{0, 16, 35, 5, 32, 31, 14, 10}
 	for i, w := range want {
 		if vecs[0][i] != w {

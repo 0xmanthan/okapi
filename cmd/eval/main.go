@@ -1,11 +1,7 @@
-// Command eval runs the siftsmall queries against an index and reports recall@k and QPS.
-// Run from the repo root:
+// recall@k and QPS on siftsmall. run from repo root:
 //
-//	go run ./cmd/eval            // summary + details for the first 2 queries
-//	go run ./cmd/eval -show 5    // details for the first 5 queries
-//	go run ./cmd/eval -show 0    // summary only
-//	go run ./cmd/eval -index hnsw -ef 20 -m 16 -efc 200
-//	go run ./cmd/eval -index hnsw -ef 10,20,50,100,200   // sweep: one summary row per ef
+//	go run ./cmd/eval -show 0
+//	go run ./cmd/eval -index hnsw -ef 10,20,50,100,200
 package main
 
 import (
@@ -23,7 +19,6 @@ import (
 	"okapi/index/hnsw"
 )
 
-// result is what both indexes return, so the rest of main doesn't care which one ran.
 type result struct {
 	ID   uint64
 	Dist float32
@@ -159,11 +154,9 @@ func main() {
 	}
 }
 
-// sweepRuns: each ef is timed this many times and the fastest run kept;
-// one pass over 100 queries takes milliseconds, so a single run is noisy.
+// best of 5, one pass is a few ms so a single run is noisy
 const sweepRuns = 5
 
-// sweep prints one row per ef: the recall-vs-speed curve.
 func sweep(search func([]float32, int) ([]result, error), query [][]float32, gt [][]int32, k int, efs []int) {
 	section("3. efSearch sweep")
 	fmt.Printf("%5s  %9s  %8s  %9s  %9s  %s\n", "ef", fmt.Sprintf("recall@%d", k), "QPS", "p50", "p99", "worst query")
@@ -185,7 +178,7 @@ func sweep(search func([]float32, int) ([]result, error), query [][]float32, gt 
 	}
 }
 
-// runQueries times each query separately to get the latency spread.
+// timed per query for p50/p99
 func runQueries(search func([]float32, int) ([]result, error), query [][]float32, ef int) ([][]result, []time.Duration, time.Duration) {
 	results := make([][]result, len(query))
 	lat := make([]time.Duration, len(query))
@@ -202,7 +195,6 @@ func runQueries(search func([]float32, int) ([]result, error), query [][]float32
 	return results, lat, time.Since(total)
 }
 
-// countHits returns, per query, how many results are in the true top-k, and the total.
 func countHits(results [][]result, gt [][]int32, k int) ([]int, int) {
 	perQuery := make([]int, len(results))
 	hits := 0

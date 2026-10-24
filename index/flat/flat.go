@@ -29,7 +29,7 @@ func (f *Flat) Add(id uint64, vec []float32) error {
 		return fmt.Errorf("flat: %w: got %d, want %d", errs.ErrDimMismatch, len(vec), f.dim)
 	}
 
-	// Copy: the caller may reuse vec's backing array.
+	// caller may reuse vec
 	v := make([]float32, len(vec))
 	copy(v, vec)
 
@@ -38,7 +38,7 @@ func (f *Flat) Add(id uint64, vec []float32) error {
 	return nil
 }
 
-// Search returns up to k nearest vectors by squared L2, nearest first.
+// nearest first
 func (f *Flat) Search(q []float32, k int) ([]Result, error) {
 	if k <= 0 {
 		return nil, fmt.Errorf("flat: %w: k=%d", errs.ErrInvalidArgument, k)
@@ -47,7 +47,7 @@ func (f *Flat) Search(q []float32, k int) ([]Result, error) {
 		return nil, fmt.Errorf("flat: %w: got %d, want %d", errs.ErrDimMismatch, len(q), f.dim)
 	}
 
-	// h holds the k nearest so far; (*h)[0] is the farthest of them.
+	// k nearest so far, (*h)[0] is the farthest
 	h := &maxHeap{}
 
 	for i, v := range f.vecs {
