@@ -8,19 +8,12 @@ import (
 	"testing"
 
 	"okapi/internal/errs"
+	"okapi/internal/testutil"
 )
 
-// not t.TempDir, so the file stays around for xxd
 func walPath(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join("testdata", "out", t.Name())
-	if err := os.RemoveAll(dir); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	return filepath.Join(dir, "wal.log")
+	return filepath.Join(testutil.OutDir(t), "wal.log")
 }
 
 func appendAll(t *testing.T, path string, recs []Record) {

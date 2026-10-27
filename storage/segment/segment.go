@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"math"
 	"os"
-	"path/filepath"
 
 	"okapi/index/hnsw"
 	"okapi/internal/errs"
@@ -15,14 +14,16 @@ import (
 )
 
 type Segment struct {
-	dim int
-	wal *wal.WAL
-	idx *hnsw.Index
+	dim     int
+	cfg     hnsw.Config
+	walPath string
+	wal     *wal.WAL
+	idx     *hnsw.Index
 }
 
-func Open(dir string, dim int, cfg hnsw.Config) (*Segment, error) {
-	path := filepath.Join(dir, "wal.log")
-
+// Open replays the WAL at path into a fresh index. Which WAL is live comes
+// from the manifest; a missing file is a new, empty segment.
+func Open(path string, dim int, cfg hnsw.Config) (*Segment, error) {
 	recs, end, err := wal.ReadAll(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -52,7 +53,7 @@ func Open(dir string, dim int, cfg hnsw.Config) (*Segment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("segment: %w", err)
 	}
-	return &Segment{dim: dim, wal: w, idx: idx}, nil
+	return &Segment{dim: dim, cfg: cfg, walPath: path, wal: w, idx: idx}, nil
 }
 
 func (s *Segment) Upsert(id uint64, vec []float32) error {
@@ -76,8 +77,35 @@ func (s *Segment) Upsert(id uint64, vec []float32) error {
 	return nil
 }
 
+func (s *Segment) Len() int { return s.idx.Len() }
+
 func (s *Segment) Search(q []float32, k, ef int) ([]hnsw.Result, error) {
 	return s.idx.Search(q, k, ef)
+}
+
+// Seal saves the index to segDir and moves writes to a new, empty WAL at nextWAL.
+// The old WAL is returned, not deleted: until the manifest lists segDir, recovery
+// only knows about this data through the old WAL.
+func (s *Segment) Seal(segDir, nextWAL string) (oldWAL string, err error) {
+	if _, err := os.Stat(nextWAL); err == nil {
+		return "", fmt.Errorf("segment: seal: %w: %s already exists", errs.ErrInvalidArgument, nextWAL)
+	}
+	if err := s.idx.Save(segDir); err != nil {
+		return "", fmt.Errorf("segment: seal: %w", err)
+	}
+	w, err := wal.Open(nextWAL)
+	if err != nil {
+		return "", fmt.Errorf("segment: seal: %w", err)
+	}
+
+	old, oldPath := s.wal, s.walPath
+	s.wal, s.walPath, s.idx = w, nextWAL, hnsw.New(s.dim, s.cfg)
+
+	// everything in the old WAL was fsynced by Append, so a failed Close loses nothing
+	if err := old.Close(); err != nil {
+		return oldPath, fmt.Errorf("segment: seal: close old wal: %w", err)
+	}
+	return oldPath, nil
 }
 
 func (s *Segment) Close() error {

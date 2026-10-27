@@ -10,11 +10,12 @@ import (
 	"testing"
 
 	"okapi/internal/errs"
+	"okapi/internal/testutil"
 )
 
 func TestSaveLoadSameResults(t *testing.T) {
 	h, _ := buildRandom(t, 1000, 16)
-	dir := t.TempDir()
+	dir := testutil.OutDir(t)
 	if err := h.Save(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func TestSaveLoadSameResults(t *testing.T) {
 }
 
 func TestSaveLoadEmpty(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.OutDir(t)
 	if err := New(4, Config{M: 8, EfConstruction: 50}).Save(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestLoadCorrupt(t *testing.T) {
 		{"negative entry", graphFile, func(b []byte) []byte { b[16], b[17], b[18], b[19] = 0xfb, 0xff, 0xff, 0xff; return b }}, // -5
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testutil.OutDir(t)
 			if err := h.Save(dir); err != nil {
 				t.Fatal(err)
 			}

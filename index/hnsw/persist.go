@@ -69,7 +69,7 @@ func (h *Index) Save(dir string) error {
 			}
 		}
 	})
-}
+} 
 
 func Load(dir string) (*Index, error) {
 	f, err := os.Open(filepath.Join(dir, graphFile))

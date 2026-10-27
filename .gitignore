@@ -3,3 +3,4 @@ learn
 .venv
 data
 **/testdata/out/
+run/okapi-data/
