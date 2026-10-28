@@ -23,6 +23,7 @@ func TestSaveLoadSameResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer got.Close()
 
 	if !slices.Equal(got.vecs, h.vecs) || !slices.Equal(got.ids, h.ids) ||
 		!reflect.DeepEqual(got.nodes, h.nodes) || got.entry != h.entry || got.maxLevel != h.maxLevel {
@@ -51,6 +52,7 @@ func TestSaveLoadEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer h.Close()
 	if res, err := h.Search([]float32{0, 0, 0, 0}, 5, 10); err != nil || len(res) != 0 {
 		t.Fatalf("got %v, %v; want no results", res, err)
 	}
@@ -84,5 +86,27 @@ func TestLoadCorrupt(t *testing.T) {
 				t.Fatalf("err = %v, want ErrCorrupt", err)
 			}
 		})
+	}
+}
+
+// a loaded index is backed by a read-only mapping of vectors.bin
+func TestLoadedIsReadOnly(t *testing.T) {
+	h, _ := buildRandom(t, 50, 8)
+	dir := testutil.OutDir(t)
+	if err := h.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Add(999, make([]float32, 8)); !errors.Is(err, errs.ErrInvalidArgument) {
+		t.Errorf("Add on loaded index: err = %v, want ErrInvalidArgument", err)
+	}
+	if err := got.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Close(); err != nil {
+		t.Errorf("second Close: %v", err)
 	}
 }

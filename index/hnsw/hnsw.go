@@ -41,9 +41,11 @@ type Index struct {
 	mL             float64
 
 	rng   *rand.Rand
-	vecs  []float32 // slab: node i is vecs[i*dim : (i+1)*dim]
+	vecs  []float32 // slab: node i is vecs[i*dim : (i+1)*dim]; mmapped after Load
 	ids   []uint64  // node i → external id
 	nodes []node
+
+	unmap func() error // set by Load; Close calls it
 
 	entry    int32 // -1 when empty
 	maxLevel int
@@ -169,6 +171,9 @@ func (h *Index) selectNeighborsHeuristic(cands []candidate, m int) []candidate {
 
 // Alg 1 (neighbours picked with Alg 4).
 func (h *Index) Add(id uint64, v []float32) error {
+	if h.unmap != nil {
+		return fmt.Errorf("hnsw: %w: loaded index is read-only", errs.ErrInvalidArgument)
+	}
 	if len(v) != h.dim {
 		return fmt.Errorf("hnsw: %w: got %d, want %d", errs.ErrDimMismatch, len(v), h.dim)
 	}

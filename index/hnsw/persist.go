@@ -69,7 +69,7 @@ func (h *Index) Save(dir string) error {
 			}
 		}
 	})
-} 
+}
 
 func Load(dir string) (*Index, error) {
 	f, err := os.Open(filepath.Join(dir, graphFile))
@@ -95,11 +95,17 @@ func Load(dir string) (*Index, error) {
 		return nil, corrupt("bad graph header: dim=%d m=%d n=%d entry=%d maxLevel=%d", dim, m, n, entry, maxLevel)
 	}
 
-	// read the flat files first: their sizes check n before we allocate n nodes
-	vecBytes, err := readExact(filepath.Join(dir, vectorsFile), n*dim*4)
+	// the flat files first: their sizes check n before we allocate n nodes
+	vecs, unmap, err := mapVectors(filepath.Join(dir, vectorsFile), n*dim)
 	if err != nil {
 		return nil, err
 	}
+	ok := false
+	defer func() {
+		if !ok {
+			unmap()
+		}
+	}()
 	idBytes, err := readExact(filepath.Join(dir, idsFile), n*8)
 	if err != nil {
 		return nil, err
@@ -116,10 +122,7 @@ func Load(dir string) (*Index, error) {
 	}
 
 	h := New(dim, Config{M: m, EfConstruction: efc})
-	h.vecs = make([]float32, n*dim)
-	for i := range h.vecs {
-		h.vecs[i] = math.Float32frombits(binary.LittleEndian.Uint32(vecBytes[i*4:]))
-	}
+	h.vecs, h.unmap = vecs, unmap
 	h.ids = make([]uint64, n)
 	for i := range h.ids {
 		h.ids[i] = binary.LittleEndian.Uint64(idBytes[i*8:])
@@ -127,6 +130,7 @@ func Load(dir string) (*Index, error) {
 	h.nodes = nodes
 	h.entry = entry
 	h.maxLevel = maxLevel
+	ok = true
 	return h, nil
 }
 

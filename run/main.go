@@ -23,6 +23,7 @@ import (
 	"okapi/index/flat"
 	"okapi/index/hnsw"
 	"okapi/storage/segment"
+	"okapi/storage/store"
 )
 
 const k, ef = 10, 50
@@ -60,6 +61,9 @@ func main() {
 	fmt.Println("\n== restart: everything comes back from MANIFEST ==")
 	sealed, mutable := db.recover(dim)
 	defer mutable.Close()
+	for _, h := range sealed {
+		defer h.Close()
+	}
 	search(sealed, mutable, base, queries)
 }
 
@@ -157,38 +161,23 @@ func (d *db) recover(dim int) ([]*hnsw.Index, *segment.Segment) {
 	return sealed, mutable
 }
 
-// fan-out: every segment can hold a true neighbour, so search all of them and keep the best k
 func search(sealed []*hnsw.Index, mutable *segment.Segment, base, queries [][]float32) {
 	exact := flat.New(len(base[0]))
 	for i, v := range base {
 		check(exact.Add(uint64(i), v))
 	}
+	segs := []store.Searcher{mutable}
+	for _, h := range sealed {
+		segs = append(segs, h)
+	}
 
 	hits := 0
 	for _, q := range queries {
-		var all []hnsw.Result
-		for _, h := range sealed {
-			r, err := h.Search(q, k, ef)
-			check(err)
-			all = append(all, r...)
-		}
-		r, err := mutable.Search(q, k, ef)
+		res, err := store.Search(segs, q, k, ef)
 		check(err)
-		all = append(all, r...)
-		slices.SortFunc(all, func(a, b hnsw.Result) int {
-			switch {
-			case a.Dist < b.Dist:
-				return -1
-			case a.Dist > b.Dist:
-				return 1
-			}
-			return 0
-		})
-		all = all[:min(k, len(all))]
-
 		truth, err := exact.Search(q, k)
 		check(err)
-		for _, r := range all {
+		for _, r := range res {
 			if slices.ContainsFunc(truth, func(t flat.Result) bool { return t.ID == r.ID }) {
 				hits++
 			}
